@@ -1,0 +1,106 @@
+<project name="mango" basedir=".." default="build">
+
+	<property file="ant/build.properties" />
+
+	<path id="compile.path">
+		<fileset dir="lib" includes="*.jar" />
+	</path>
+
+	<!--<taskdef name="pack200" classname="com.sun.tools.apache.ant.pack200.Pack200Task" classpath="${ant.home}/etc/Pack200Task.jar" />-->
+
+	<target name="init">
+		<mkdir dir="build/classes" />
+		<mkdir dir="build/dist" />
+		<uptodate property="classes.uptodate" targetfile="build/dist/${ant.project.name}.jar">
+			<srcfiles dir="src/main/java">
+				<include name="**/*.java" />
+			</srcfiles>
+			<srcfiles dir="keys">
+        <include name="${ant.project.name}.jks" />
+			</srcfiles>
+		</uptodate>
+	</target>
+
+	<!-- ================================= 
+          target: build              
+         ================================= -->
+	<target name="build" depends="init" unless="classes.uptodate" description="Builds everything">
+
+		<javac srcdir="src/main/java" destdir="build/classes" classpathref="compile.path" debug="on" />
+
+		<copy todir="build/classes">
+			<fileset dir="src/main/resources" includes="**/*" />
+    </copy>
+
+		<mkdir dir="build/dist/lib" />
+		<copy todir="build/dist/lib">
+			<fileset dir="lib" includes="**/*" />
+    </copy>
+    
+    <manifestclasspath property="lib.list" jarfile="build/dist/${ant.project.name}.jar">
+      <classpath>
+        <fileset dir="build/dist/lib" includes="**/*.jar"/>
+      </classpath>
+    </manifestclasspath>
+
+    <jar basedir="build/classes" destfile="build/dist/${ant.project.name}.jar">
+      <manifest>
+        <attribute name="Main-Class" value="${main.class}"/>
+        <attribute name="Class-Path" value="${lib.list}"/>
+      </manifest>
+    </jar>
+
+		<!--<pack200 src="build/dist/prototype-unpacked.jar" destfile="build/dist/prototype.jar" repack="true" />-->
+		<!--<delete file="build/dist/prototype-unpacked.jar" />-->
+		<signjar alias="${keystore.alias}" keystore="${keystore.file}" keypass="${alias.password}" storepass="${keystore.password}">
+			<fileset dir="build/dist">
+        <include name="${ant.project.name}.jar" />
+			</fileset>
+    </signjar>
+
+    <chmod dir="build/dist" perm="755" includes="${ant.project.name}.jar"/>
+  </target>
+
+  <target name="test" depends="build">
+    <taskdef resource="testngtasks" classpath="test-lib/testng-5.12.1.jar"/>
+
+    <mkdir dir="build/test-classes"/>
+    <path id="test.classpath">
+      <path refid="compile.path"/>
+      <pathelement location="build/classes"/>
+      <pathelement location="build/test-classes"/>
+      <fileset dir="test-lib" includes="*.jar"/>
+    </path>
+
+    <javac srcdir="src/test/java" destdir="build/test-classes" includeantruntime="false" classpathref="test.classpath" debug="true" debuglevel="lines,source"/>
+
+    <testng workingdir="." classpathref="test.classpath" outputdir="build/test-reports" haltonfailure="true" verbose="2">
+      <classfileset dir="build/test-classes" includes="**/*.class"/>
+    </testng>
+  </target>
+
+  <target name="run" depends="build">
+    <java fork="true" spawn="true" jar="build/dist/${ant.project.name}.jar">
+      <jvmarg value="-Djava.library.path=lib/natives"/>
+    </java>
+  </target>
+
+	<target name="sign-third-party-jars" depends="init" unless="jars.uptodate">
+		<signjar alias="${keystore.alias}" keystore="${keystore.file}" keypass="${alias.password}" storepass="${keystore.password}">
+			<fileset dir="build/dist">
+				<include name="lib/*.jar" />
+			</fileset>
+		</signjar>
+	</target>
+
+	<target name="release" depends="build, sign-third-party-jars">
+		<mkdir dir="${release.dir}" />
+		<copy todir="${release.dir}">
+			<fileset dir="build/dist" includes="**/*" />
+		</copy>
+	</target>
+
+	<target name="clean">
+		<delete dir="build" />
+	</target>
+</project>
